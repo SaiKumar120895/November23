@@ -74,7 +74,7 @@ context master {
         bankId: String(20);
         bankName: String(64);
     }
-}
+};
 
 context transaction {
     
@@ -98,4 +98,102 @@ context transaction {
               
      }
 
+};
+
+context  CDSView  {
+define view![POWorklist] as
+  select from transaction.purchaseorder{
+    key PO_ID as![PurchaseOrderId],
+    PARTNER_GUID.BP_ID as![PartnerId],
+    PARTNER_GUID.COMPANY_NAME as![CompanyName],
+    GROSS_AMOUNT as![POGrossAmount],
+    Currency.code as![POCurrencyCode],
+    LIFECYCLE_STATUS as![POStatus],
+    key Items.PO_ITEM_POS as![ItemPosition],
+    Items.PRODUCT_GUID.PRODUCT_ID as![productId],
+    Items.PRODUCT_GUID.DESCRIPTION as![ProductName],
+    PARTNER_GUID.ADDRESS_GUID.CITY as![City],
+    PARTNER_GUID.ADDRESS_GUID.COUNTRY as![Country],
+    Items.GROSS_AMOUNT as![GrossAmount],
+    Items.TAX_AMOUNT as![TaxAmount],
+    // Items.QUANTITY as![Quantity],
+    // Items.QUANTITY_UNIT as![QunatityUnit],
+    Items.Currency.code as![CurrencyCode]
+  };
+
+  define view ProductValueHelp as
+    select from master.product {
+     @EndUserText.lable:[
+        {
+            language: 'EN',
+            text: 'Product ID'
+        },
+        {
+            language: 'DE',
+            text: 'Prodekt ID'
+        }
+
+     ]
+     PRODUCT_ID as ![ProductId],
+     @EndUserText.lable:[
+        {
+            language: 'EN',
+            text: 'Product Description'
+        },
+        {
+            language: 'EN',
+            text: 'Prodekt Description'
+        }
+     ]
+     DESCRIPTION as ![Description]
+  };
+
+  define view ![ItemView] as
+    select from transaction.poitems{
+        PARENT_KEY.PARTNER_GUID.NODE_KEY as![Partner],
+        PRODUCT_GUID.NODE_KEY as![ProductId],
+        Currency.code as![CurrencyCode],
+        GROSS_AMOUNT as![GrossAmount],
+        NET_AMOUNT as![NetAmount],
+        TAX_AMOUNT as![TaxAmount],
+        PARENT_KEY.OVERALL_STATUS as![POStatus]
+    };  
+  define view ProductViewSub as
+    select from master.product as prod{
+        PRODUCT_ID as ![ProductId],
+        texts.DESCRIPTION as![Description],
+        (
+            select from transaction.poitems as a{
+                round(SUM(a.GROSS_AMOUNT),2) as SUM
+            }
+            where a.PRODUCT_GUID.NODE_KEY = prod.NODE_KEY
+        ) as PO_SUM: Decimal(10,2)
+    };
+  define view ProductView as 
+   select from master.product
+   mixin{
+    PO_ORDERS: Association[*] to ItemView on
+    PO_ORDERS.ProductId = $projection.ProductId
+   }
+   into{
+    NODE_KEY as![ProductId],
+    DESCRIPTION,
+    CATEGORY as![Category],
+    PRICE as![Price],
+    TYPE_CODE as![TypeCode],
+    SUPPLIER_GUID.BP_ID as![BPId],
+    SUPPLIER_GUID.COMPANY_NAME as![CompanyName],
+    SUPPLIER_GUID.ADDRESS_GUID.CITY as![City],
+    SUPPLIER_GUID.ADDRESS_GUID.COUNTRY as![Country],
+    PO_ORDERS
+   };
+ define view CProductValuesView as
+    select from ProductView{
+        ProductId,
+        Country,
+        PO_ORDERS.CurrencyCode as![CurrencyCode],
+        round(SUM(PO_ORDERS.GrossAmount),2) as ![POGrossAmount]: Decimal(10,2)
+    }
+    group by ProductId,Country,PO_ORDERS.CurrencyCode
 }
+
